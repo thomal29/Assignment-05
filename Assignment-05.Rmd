@@ -1,6 +1,6 @@
 ---
 title: "Assignment 5"
-author: "YOUR NAME"
+author: "Lauren Thomas"
 date: "`r format(Sys.time(), '%B %d, %Y')`"
 output: html_document
 ---
@@ -10,30 +10,116 @@ output: html_document
 
 <!-- (2) Write a chunk that loads the needed tidyverse libraries but does not show up in any way in the final html document. --> 
 
+```{r load_libraries, echo = FALSE, message = FALSE}
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(kableExtra)
+library(HelpersMG)
+
+```
+
 
 <!-- (3) Write a chunk that uses wget to download the data file from the Harvard Dataverse and save is as raw_data/Countries-Deaths.tsv. This chunk should also not show up in any way in the final html and should be cached so that you do not repeatedly download the file as you reexecute your code. --> 
+
+```{r Harv_Data, echo = FALSE, message = FALSE}
+if(!file.exists("./raw_data/Countries-Deaths.tsv")) {
+	wget(url = "https://dataverse.harvard.edu/api/access/datafile/:persistentId?persistentId=doi:10.7910/DVN/L20LOT/FZLQRQ", destfile = "./raw_data/Countries-Deaths.tsv")
+}
+
+```
 
 
 <!-- (4) Write a chunk that creates a tidy dataset called output/GFI_total_deaths_by_date.csv. This file should have variables named Country, Date, and Total_Deaths. You will need to use several tidy tools to restructure the data with pivot_long() and convert the four-digit codes to dates using lubridate. Filter the data so that only information from Germany, France, and Italy are present. This chuck should not display anything in the final html document. --> 
 
+```{r countryName, echo = FALSE, message = FALSE}
+dateButchery <- function(date) {
+	return(mdy(paste(substr(date, 1, 2), "-", substr(date, 3, 4), "-2020")))
+}
 
-<!-- (5) Write another chunk that reates a tidy dataset called output/GFI_daily_deaths_by_date.csv. This file should have variables named Country, Date, and Daily_Deaths. You can start from the previous data and use the lag() function to calculate the daily death rates as a difference between adjacent datapoints. Once again, this should not show up in the final html. --> 
+read_tsv("./raw_data/Countries-Deaths.tsv") %>%
+	filter(CNTRYNAME == "Germany" | CNTRYNAME == "Italy" | CNTRYNAME == "France") %>%
+	pivot_longer(-CNTRYNAME,
+				 names_to = "Date",
+				 values_to = "Total_Deaths") %>%
+	rename(Country = CNTRYNAME) %>%
+	mutate(Date = dateButchery(Date)) %>%
+	write.table(file = "./output/GFI_total_deaths_by_date.csv", row.names = FALSE, sep = ",")
 
+
+```
+
+
+<!-- (5) Write another chunk that creates a tidy dataset called output/GFI_daily_deaths_by_date.csv. This file should have variables named Country, Date, and Daily_Deaths. You can start from the previous data and use the lag() function to calculate the daily death rates as a difference between adjacent datapoints. Once again, this should not show up in the final html. --> 
+
+```{r Deaths_on_the_daily, echo = FALSE, message = FALSE}
+dailyDeaths <- function(tibbleColumn) {
+	count = 1
+	for(element in tibbleColumn) {
+		if(element < 0) {
+			tibbleColumn[[count]] = 0
+		}
+		count = count + 1
+	}
+	return(tibbleColumn)
+}
+
+read_csv("./output/GFI_total_deaths_by_date.csv") %>%
+	transmute(Country, Date, Daily_Deaths = dailyDeaths(Total_Deaths - lag(Total_Deaths, default = 0))) %>%
+	write.table(file = "./output/GFI_daily_deaths_by_date.csv", row.names = FALSE, sep = ",")
+
+
+```
+
+
+## Introduction
+
+The data for these analyses was provided by Harvard University. The data spans from February until June of this year and covers three different countries: France, Italy, and Germany. 
+((In late Feb. early March the number of total deaths had a steep rise in Italy. Whereas Germany and France began to rise gradual in a short time after.))
 
 <!-- (6) Write a chunk that uses ggplot2 to create a line graph that comparing the total deaths between the three countries over time. Color each line by country and use a line size of 1.5. Set the Y axis to be a log10 scale, and label that axis as Total COVID-19 Deaths. Please use the ggplot2 linedraw theme for your plot. --> 
+
+```{r compared_total_deaths, echo = FALSE, message = FALSE}
+ggplot(read_csv("./output/GFI_total_deaths_by_date.csv"), aes(x = Date, y = Total_Deaths, color = Country)) + geom_line(size = 1.5) + labs(y = "Total COVID-19 Deaths") + theme_linedraw() + scale_y_log10()
+
+
+```
 
 
 <!-- (7) Write a chunk that uses ggplot2 to create a line graph that comparing the daily deaths between the three countries over time. Color each line by country and use a line size of 1.5. Label the y axis as Daily COVID-19 Deaths and set the y-axis limits to range from 0 to 1,000. Please use the ggplot2 linedraw theme for your plot. --> 
 
+```{r compared_daily_deaths, echo = FALSE, message = TRUE}
+ggplot(read_csv("./output/GFI_daily_deaths_by_date.csv"), aes(x = Date, y = Daily_Deaths, color = Country)) + geom_line(size = 1.5) + labs(y = "Daily COVID-19 Deaths") + theme_linedraw() + ylim(0,1000)
 
-<!-- (8) Write one last chuck that groups the daily death data by country and finds the maximum number of deaths per day. Use knitr::kable() to display this as a table in your html document. -->  
 
+```
+
+
+
+<!-- (8) Write one last chuck that groups the daily death data by country and finds the maximum number of deaths per day. Use knitr::kable() to display this as a table in your html document. -->
+
+```{r max_deaths, echo = FALSE, message = FALSE}
+read_csv("./output/GFI_daily_deaths_by_date.csv") %>%
+	group_by(Country) %>%
+	transmute(Max_Daily_Deaths = max(Daily_Deaths)) %>%
+	distinct() %>%
+	knitr::kable(col.names = c("Country", "Maximum Deaths per Day")) %>%
+	kable_styling(full_width = FALSE, position = "left")
+
+
+```
+
+
+
+## Conclusion
+From looking at these graphical analyses, some things can be seen. For instance, Italy's rise in deaths began before both Germany and France. However, intrestingly enough, Gerrmany's total death was lower than the others. France's initial increase began shortly after Italy's and peaked at the highest. It wasn't until late April that the total deaths for all these countries began to decrease.
 
 <!-- (9) Using markdown, provide an introduction and conclusion section before and after the analysis that you just performed, respectively. These sections should be level 2 headings. --> 
 
 
-<!-- (10) Cite your data source - another level 2 heading - using this reference. Check online to make sure that you get any formatting (e.g. italics, links, etc. correct) --> 
 
+<!-- (10) Cite your data source - another level 2 heading - using this reference. Check online to make sure that you get any formatting (e.g. italics, links, etc. correct) --> 
+## Reference
 
 Data Source    
 China Data Lab, 2020, "Countries-Deaths.tab", World COVID-19 Daily Cases with Basemap, https://doi.org/10.7910/DVN/L20LOT/FZLQRQ, Harvard Dataverse, V22, UNF:6:AntG1aQ3uPjWCuJZ5P2uEA== [fileUNF]
